@@ -2,14 +2,9 @@ import pg from "pg";
 
 const { Pool } = pg;
 
-
-/* =========================================================
-   DATABASE CONNECTION
-   ========================================================= */
-
 if (!process.env.DATABASE_URL) {
   console.warn(
-    "WARNING: DATABASE_URL has not been configured yet."
+    "DATABASE_URL is not set. The server will not be able to connect to PostgreSQL."
   );
 }
 
@@ -18,40 +13,27 @@ const pool = new Pool({
 
   ssl:
     process.env.NODE_ENV === "production"
-      ? {
-          rejectUnauthorized: false
-        }
-      : false
+      ? { rejectUnauthorized: false }
+      : false,
+
+  max: 10,
+
+  idleTimeoutMillis: 30_000,
+
+  connectionTimeoutMillis: 10_000
 });
 
-
-/* =========================================================
-   DATABASE QUERY HELPER
-   ========================================================= */
-
-export async function query(
-  text,
-  params = []
-) {
-  const client = await pool.connect();
-
-  try {
-    return await client.query(
-      text,
-      params
-    );
-  } finally {
-    client.release();
-  }
+export async function query(text, params = []) {
+  return pool.query(text, params);
 }
 
-
-/* =========================================================
-   CREATE DATABASE TABLES
-   ========================================================= */
-
 export async function initializeDatabase() {
+  // Required for gen_random_uuid()
+  await query(`
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  `);
 
+  // Owner account
   await query(`
     CREATE TABLE IF NOT EXISTS owners (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -60,12 +42,12 @@ export async function initializeDatabase() {
     );
   `);
 
-
+  // Pets
   await query(`
     CREATE TABLE IF NOT EXISTS pets (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name TEXT NOT NULL,
-      category TEXT NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      category VARCHAR(50) NOT NULL,
       description TEXT NOT NULL,
       price NUMERIC(12, 2) NOT NULL DEFAULT 0,
       image_url TEXT,
@@ -74,51 +56,38 @@ export async function initializeDatabase() {
     );
   `);
 
-
+  // Customer inquiries
   await query(`
     CREATE TABLE IF NOT EXISTS inquiries (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      email TEXT,
-      pet TEXT,
+      name VARCHAR(100) NOT NULL,
+      phone VARCHAR(40) NOT NULL,
+      email VARCHAR(150),
+      pet VARCHAR(150) NOT NULL,
       message TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
-
+  // Customer orders
   await query(`
     CREATE TABLE IF NOT EXISTS orders (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      email TEXT,
+      name VARCHAR(100) NOT NULL,
+      phone VARCHAR(40) NOT NULL,
+      email VARCHAR(150),
       items TEXT NOT NULL,
       address TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
+      status VARCHAR(30) NOT NULL DEFAULT 'pending',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
-
-  console.log(
-    "Pet Store database tables are ready."
-  );
+  console.log("Pet Store database initialized successfully.");
 }
-
-
-/* =========================================================
-   CLOSE DATABASE
-   ========================================================= */
 
 export async function closeDatabase() {
   await pool.end();
 }
-
-
-/* =========================================================
-   DEFAULT EXPORT
-   ========================================================= */
 
 export default pool;
