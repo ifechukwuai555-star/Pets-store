@@ -1,72 +1,65 @@
-/* =========================================================
-   PET STORE — JAVASCRIPT
-   Customer features + Owner dashboard + API connection
-   ========================================================= */
+"use strict";
 
 /*
+  PET STORE FRONTEND
+  ------------------
+  This file connects the HTML website to the Pet Store backend.
+
   IMPORTANT:
-  For GitHub Pages + a separate backend, set:
-
-  window.PET_STORE_API_URL = "YOUR-BACKEND-URL";
-
-  before this script loads, or change API_BASE below.
+  The owner's password is NEVER stored here.
+  Authentication is handled by the backend.
 */
 
-const API_BASE = window.PET_STORE_API_URL || "";
+// --------------------------------------------------
+// Backend URL
+// --------------------------------------------------
 
+// Leave empty while testing the frontend and backend
+// on the same server.
+//
+// When the backend is deployed separately, set:
+// window.PET_STORE_API_URL = "https://YOUR-BACKEND-URL";
 
-/* =========================================================
-   BASIC HELPERS
-   ========================================================= */
+const API_BASE =
+  window.PET_STORE_API_URL || "";
 
-const $ = (selector) => document.querySelector(selector);
+// --------------------------------------------------
+// Helpers
+// --------------------------------------------------
 
-const $$ = (selector) => document.querySelectorAll(selector);
+function apiUrl(path) {
+  return `${API_BASE}${path}`;
+}
 
 function escapeHTML(value) {
   return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
-function formatPrice(price) {
-  const number = Number(price);
+function showMessage(element, message, type = "info") {
+  if (!element) return;
 
-  if (Number.isNaN(number)) {
-    return escapeHTML(price);
-  }
-
-  return `₦${number.toLocaleString("en-NG")}`;
+  element.textContent = message;
+  element.className = `message ${type}`;
+  element.hidden = false;
 }
 
-function formatDate(date) {
-  if (!date) return "";
+function hideMessage(element) {
+  if (!element) return;
 
-  const parsed = new Date(date);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return escapeHTML(date);
-  }
-
-  return parsed.toLocaleString("en-NG");
+  element.hidden = true;
+  element.textContent = "";
 }
 
-async function apiRequest(endpoint, options = {}) {
-  const config = {
+async function apiRequest(path, options = {}) {
+  const response = await fetch(apiUrl(path), {
     credentials: "include",
-    ...options,
-    headers: {
-      ...(options.body instanceof FormData
-        ? {}
-        : { "Content-Type": "application/json" }),
-      ...(options.headers || {})
-    }
-  };
-
-  const response = await fetch(`${API_BASE}${endpoint}`, config);
+    ...options
+  });
 
   let data = {};
 
@@ -78,32 +71,31 @@ async function apiRequest(endpoint, options = {}) {
 
   if (!response.ok) {
     throw new Error(
-      data.message || data.error || `Request failed (${response.status})`
+      data.error || "Something went wrong. Please try again."
     );
   }
 
   return data;
 }
 
-
-/* =========================================================
-   NAVIGATION
-   ========================================================= */
+// --------------------------------------------------
+// Navigation
+// --------------------------------------------------
 
 function setupNavigation() {
-  $$(".nav-links a, a[href^='#']").forEach((link) => {
+  const navLinks = document.querySelectorAll(
+    ".nav-links a[href^='#']"
+  );
+
+  navLinks.forEach((link) => {
     link.addEventListener("click", (event) => {
-      const href = link.getAttribute("href");
+      const targetId = link.getAttribute("href");
 
-      if (!href || !href.startsWith("#")) {
-        return;
-      }
+      if (!targetId || targetId === "#") return;
 
-      const target = $(href);
+      const target = document.querySelector(targetId);
 
-      if (!target) {
-        return;
-      }
+      if (!target) return;
 
       event.preventDefault();
 
@@ -111,176 +103,201 @@ function setupNavigation() {
         behavior: "smooth",
         block: "start"
       });
+
+      history.replaceState(null, "", targetId);
     });
   });
 }
 
-
-/* =========================================================
-   CUSTOMER PETS
-   ========================================================= */
+// --------------------------------------------------
+// Pet loading
+// --------------------------------------------------
 
 async function loadPets() {
-  const petGrid = $("#petGrid");
-  const loadingMessage = $("#petsLoading");
-  const emptyMessage = $("#petsEmpty");
+  const petGrid = document.querySelector("#petGrid");
+  const loading = document.querySelector("#petsLoading");
+  const empty = document.querySelector("#petsEmpty");
 
   if (!petGrid) return;
 
-  if (loadingMessage) {
-    loadingMessage.classList.remove("hidden");
-  }
-
-  if (emptyMessage) {
-    emptyMessage.classList.add("hidden");
-  }
+  if (loading) loading.hidden = false;
+  if (empty) empty.hidden = true;
 
   try {
     const data = await apiRequest("/api/pets");
 
-    const pets = Array.isArray(data)
-      ? data
-      : Array.isArray(data.pets)
-        ? data.pets
-        : [];
+    const pets = Array.isArray(data.pets)
+      ? data.pets
+      : [];
 
-    if (loadingMessage) {
-      loadingMessage.classList.add("hidden");
-    }
+    petGrid.innerHTML = "";
 
     if (pets.length === 0) {
-      petGrid.innerHTML = "";
-
-      if (emptyMessage) {
-        emptyMessage.classList.remove("hidden");
-      }
-
+      if (empty) empty.hidden = false;
       return;
     }
 
-    petGrid.innerHTML = pets.map(createPetCard).join("");
+    pets.forEach((pet) => {
+      petGrid.appendChild(createPetCard(pet));
+    });
 
-    attachPetEvents();
-
+    setupPetInteractions();
   } catch (error) {
-    console.error("Could not load pets:", error);
-
-    if (loadingMessage) {
-      loadingMessage.classList.add("hidden");
-    }
+    console.error("Unable to load pets:", error);
 
     petGrid.innerHTML = `
-      <div class="message error">
+      <p class="error-message">
         Unable to load pets right now. Please try again later.
-      </div>
+      </p>
     `;
+  } finally {
+    if (loading) loading.hidden = true;
   }
 }
 
 function createPetCard(pet) {
-  const id = escapeHTML(pet.id);
-  const name = escapeHTML(pet.name);
-  const category = escapeHTML(pet.category);
-  const description = escapeHTML(pet.description);
-  const price = formatPrice(pet.price);
-  const likes = Number(pet.likes || 0);
+  const card = document.createElement("article");
 
-  const image =
-    pet.image_url ||
-    pet.imageUrl ||
-    "https://placehold.co/800x500?text=Pet";
+  card.className = "pet-card";
 
-  return `
-    <article class="pet-card" data-pet-id="${id}">
+  const image = pet.image_url
+    ? escapeHTML(apiUrl(pet.image_url))
+    : "";
 
-      <img
-        src="${escapeHTML(image)}"
-        alt="${name}"
-        class="pet-image"
-        data-pet-id="${id}"
-      >
+  const price = Number(pet.price);
 
-      <div class="pet-card-content">
+  const formattedPrice = Number.isFinite(price)
+    ? `₦${price.toLocaleString("en-NG", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })}`
+    : "Price available on inquiry";
 
-        <h3>${name}</h3>
+  card.innerHTML = `
+    <button
+      type="button"
+      class="pet-image-button"
+      data-pet-name="${escapeHTML(pet.name)}"
+      aria-label="Inquire about ${escapeHTML(pet.name)}"
+    >
+      ${
+        image
+          ? `
+            <img
+              src="${image}"
+              alt="${escapeHTML(pet.name)}"
+              loading="lazy"
+            >
+          `
+          : `
+            <div class="pet-image-placeholder">
+              🐾
+            </div>
+          `
+      }
+    </button>
 
-        <p>
-          <strong>Category:</strong>
-          ${category}
-        </p>
+    <div class="pet-card-content">
+      <span class="pet-category">
+        ${escapeHTML(pet.category)}
+      </span>
 
-        <p>${description}</p>
+      <h3>${escapeHTML(pet.name)}</h3>
 
-        <div class="pet-price">
-          ${price}
-        </div>
+      <p>
+        ${escapeHTML(pet.description)}
+      </p>
 
-        <p>
-          ❤️ <span class="like-count">${likes}</span> likes
-        </p>
+      <strong class="pet-price">
+        ${formattedPrice}
+      </strong>
 
-        <div class="pet-actions">
+      <div class="pet-actions">
+        <button
+          type="button"
+          class="inquire-pet"
+          data-pet-name="${escapeHTML(pet.name)}"
+        >
+          Inquire
+        </button>
 
-          <button
-            class="btn btn-secondary inquire-pet-btn"
-            type="button"
-            data-pet="${name}"
-          >
-            Inquire
-          </button>
-
-          <button
-            class="btn btn-primary like-pet-btn"
-            type="button"
-            data-id="${id}"
-          >
-            ❤️ Like
-          </button>
-
-        </div>
-
+        <button
+          type="button"
+          class="like-pet"
+          data-pet-id="${escapeHTML(pet.id)}"
+        >
+          ❤️ ${Number(pet.likes) || 0}
+        </button>
       </div>
-    </article>
+    </div>
   `;
+
+  return card;
 }
 
-function attachPetEvents() {
-  $$(".pet-image").forEach((image) => {
-    image.addEventListener("click", () => {
-      const petName =
-        image.closest(".pet-card")?.querySelector("h3")?.textContent || "";
+// --------------------------------------------------
+// Pet interactions
+// --------------------------------------------------
 
-      selectPetForInquiry(petName);
+function setupPetInteractions() {
+  document
+    .querySelectorAll(".inquire-pet, .pet-image-button")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const petName =
+          button.dataset.petName || "";
+
+        openInquiryForPet(petName);
+      });
     });
-  });
 
-  $$(".inquire-pet-btn").forEach((button) => {
-    button.addEventListener("click", () => {
-      const petName = button.dataset.pet || "";
+  document
+    .querySelectorAll(".like-pet")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        const petId = button.dataset.petId;
 
-      selectPetForInquiry(petName);
+        if (!petId) return;
+
+        button.disabled = true;
+
+        try {
+          const data = await apiRequest(
+            `/api/pets/${encodeURIComponent(petId)}/like`,
+            {
+              method: "POST"
+            }
+          );
+
+          button.textContent =
+            `❤️ ${Number(data.likes) || 0}`;
+        } catch (error) {
+          console.error("Like error:", error);
+        } finally {
+          button.disabled = false;
+        }
+      });
     });
-  });
-
-  $$(".like-pet-btn").forEach((button) => {
-    button.addEventListener("click", async () => {
-      await likePet(button);
-    });
-  });
 }
 
+// --------------------------------------------------
+// Inquiry
+// --------------------------------------------------
 
-/* =========================================================
-   PET INQUIRY SELECTION
-   ========================================================= */
+function openInquiryForPet(petName) {
+  const form = document.querySelector("#inquiryForm");
 
-function selectPetForInquiry(petName) {
-  const petInput = $("#inquiryPet");
-  const inquirySection = $("#inquiry");
+  if (!form) return;
+
+  const petInput =
+    form.querySelector('[name="pet"]');
 
   if (petInput) {
     petInput.value = petName;
   }
+
+  const inquirySection =
+    document.querySelector("#inquiry");
 
   if (inquirySection) {
     inquirySection.scrollIntoView({
@@ -289,319 +306,390 @@ function selectPetForInquiry(petName) {
     });
   }
 
-  setTimeout(() => {
-    const nameInput = $("#inquiryName");
+  const nameInput =
+    document.querySelector("#inquiryName");
 
-    if (nameInput) {
-      nameInput.focus();
-    }
-  }, 500);
-}
-
-
-/* =========================================================
-   PET LIKES
-   ========================================================= */
-
-async function likePet(button) {
-  const petId = button.dataset.id;
-
-  if (!petId) return;
-
-  button.disabled = true;
-
-  try {
-    const data = await apiRequest(
-      `/api/pets/${encodeURIComponent(petId)}/like`,
-      {
-        method: "POST"
-      }
-    );
-
-    const card = button.closest(".pet-card");
-    const count = card?.querySelector(".like-count");
-
-    if (count && data.likes !== undefined) {
-      count.textContent = data.likes;
-    }
-
-    button.textContent = "❤️ Liked";
-
-  } catch (error) {
-    console.error("Like failed:", error);
-
-    button.disabled = false;
-
-    alert("Sorry, we could not record your like. Please try again.");
+  if (nameInput) {
+    setTimeout(() => nameInput.focus(), 400);
   }
 }
 
-
-/* =========================================================
-   INQUIRY FORM
-   ========================================================= */
-
 function setupInquiryForm() {
-  const form = $("#inquiryForm");
+  const form = document.querySelector("#inquiryForm");
+  const success = document.querySelector("#inquirySuccess");
+  const status = document.querySelector(
+    "#inquiryMessageStatus"
+  );
 
   if (!form) return;
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const submitButton = form.querySelector("button[type='submit']");
-    const successBox = $("#inquirySuccess");
-    const status = $("#inquiryMessageStatus");
+    hideMessage(success);
+    hideMessage(status);
+
+    const submitButton =
+      form.querySelector('button[type="submit"]');
+
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
 
     const formData = new FormData(form);
 
     const payload = {
-      name: formData.get("name")?.trim(),
-      phone: formData.get("phone")?.trim(),
-      email: formData.get("email")?.trim(),
-      pet: formData.get("pet")?.trim(),
-      message: formData.get("message")?.trim()
+      name: String(formData.get("name") || "").trim(),
+      phone: String(formData.get("phone") || "").trim(),
+      email: String(formData.get("email") || "").trim(),
+      pet: String(formData.get("pet") || "").trim(),
+      message: String(formData.get("message") || "").trim()
     };
 
-    if (!payload.name || !payload.phone || !payload.message) {
-      showMessage(
-        status,
-        "Please fill in your name, phone number and message.",
-        "error"
-      );
-      return;
-    }
-
-    if (submitButton) {
-      submitButton.disabled = true;
-      submitButton.textContent = "Sending...";
-    }
-
     try {
-      await apiRequest("/api/inquiries", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      });
-
-      form.reset();
-
-      if (successBox) {
-        successBox.classList.add("show");
-        successBox.textContent =
-          "Your inquiry has been received successfully. The owner can review it from the Owner Dashboard.";
-      }
-
-      if (status) {
-        status.textContent = "";
-        status.className = "message";
-      }
-
-    } catch (error) {
-      console.error("Inquiry failed:", error);
-
-      showMessage(
-        status,
-        error.message || "Your inquiry could not be sent. Please try again.",
-        "error"
+      const data = await apiRequest(
+        "/api/inquiries",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        }
       );
-
-    } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.textContent = "Send Inquiry";
-      }
-    }
-  });
-}
-
-
-/* =========================================================
-   ORDER FORM
-   ========================================================= */
-
-function setupOrderForm() {
-  const form = $("#orderForm");
-
-  if (!form) return;
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const submitButton = form.querySelector("button[type='submit']");
-    const message = $("#orderMessage");
-
-    const formData = new FormData(form);
-
-    const payload = {
-      name: formData.get("name")?.trim(),
-      phone: formData.get("phone")?.trim(),
-      email: formData.get("email")?.trim(),
-      items: formData.get("items")?.trim(),
-      address: formData.get("address")?.trim()
-    };
-
-    if (
-      !payload.name ||
-      !payload.phone ||
-      !payload.items ||
-      !payload.address
-    ) {
-      showMessage(
-        message,
-        "Please complete all required order fields.",
-        "error"
-      );
-
-      return;
-    }
-
-    if (submitButton) {
-      submitButton.disabled = true;
-      submitButton.textContent = "Placing Order...";
-    }
-
-    try {
-      await apiRequest("/api/orders", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      });
 
       form.reset();
 
       showMessage(
-        message,
-        "Your order has been received successfully. The owner can review it from the Owner Dashboard.",
+        success,
+        data.message ||
+          "Your inquiry has been received.",
         "success"
       );
 
+      if (success) {
+        success.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+      }
     } catch (error) {
-      console.error("Order failed:", error);
-
       showMessage(
-        message,
-        error.message || "Your order could not be submitted.",
+        status,
+        error.message ||
+          "Unable to send your inquiry.",
         "error"
       );
-
     } finally {
       if (submitButton) {
         submitButton.disabled = false;
-        submitButton.textContent = "Place Order";
       }
     }
   });
 }
 
+// --------------------------------------------------
+// Orders
+// --------------------------------------------------
 
-/* =========================================================
-   MESSAGE HELPER
-   ========================================================= */
-
-function showMessage(element, text, type = "success") {
-  if (!element) return;
-
-  element.textContent = text;
-  element.className = `message ${type}`;
-}
-
-
-/* =========================================================
-   OWNER AUTHENTICATION
-   ========================================================= */
-
-async function checkOwnerStatus() {
-  const setupArea = $("#ownerSetup");
-  const loginArea = $("#ownerLogin");
-  const dashboard = $("#ownerDashboard");
-  const statusMessage = $("#ownerStatusMessage");
-
+function getCart() {
   try {
-    const data = await apiRequest("/api/owner/status");
+    const cart = JSON.parse(
+      localStorage.getItem("petStoreCart") || "[]"
+    );
 
-    if (data.ownerExists) {
-      if (setupArea) {
-        setupArea.classList.add("hidden");
-      }
-
-      if (loginArea) {
-        loginArea.classList.remove("hidden");
-      }
-
-    } else {
-      if (setupArea) {
-        setupArea.classList.remove("hidden");
-      }
-
-      if (loginArea) {
-        loginArea.classList.add("hidden");
-      }
-
-      if (dashboard) {
-        dashboard.classList.remove("active");
-      }
-    }
-
-    await checkOwnerSession();
-
-  } catch (error) {
-    console.error("Owner status check failed:", error);
-
-    if (statusMessage) {
-      showMessage(
-        statusMessage,
-        "The owner system is currently unavailable.",
-        "error"
-      );
-    }
-  }
-}
-
-async function checkOwnerSession() {
-  try {
-    const data = await apiRequest("/api/owner/me");
-
-    if (data.authenticated) {
-      showOwnerDashboard();
-      await loadOwnerDashboard();
-    } else {
-      hideOwnerDashboard();
-    }
-
+    return Array.isArray(cart) ? cart : [];
   } catch {
-    hideOwnerDashboard();
+    return [];
   }
 }
 
+function saveCart(cart) {
+  localStorage.setItem(
+    "petStoreCart",
+    JSON.stringify(cart)
+  );
+}
 
-/* =========================================================
-   OWNER SETUP
-   ========================================================= */
+function setupCart() {
+  const buttons =
+    document.querySelectorAll(".add-to-cart");
 
-function setupOwnerSetupForm() {
-  const form = $("#ownerSetupForm");
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const item = {
+        name:
+          button.dataset.name ||
+          button.closest(".product-card")
+            ?.querySelector("h3")
+            ?.textContent ||
+          "Pet Store item",
+
+        price:
+          button.dataset.price || ""
+      };
+
+      const cart = getCart();
+
+      cart.push(item);
+
+      saveCart(cart);
+
+      button.textContent = "Added ✓";
+
+      setTimeout(() => {
+        button.textContent = "Add to Cart";
+      }, 1500);
+
+      updateCartDisplay();
+    });
+  });
+
+  updateCartDisplay();
+}
+
+function updateCartDisplay() {
+  const cart = getCart();
+
+  const cartCount =
+    document.querySelector("#cartCount");
+
+  if (cartCount) {
+    cartCount.textContent = String(cart.length);
+  }
+
+  const cartItems =
+    document.querySelector("#cartItems");
+
+  if (cartItems) {
+    cartItems.innerHTML = cart.length
+      ? cart
+          .map(
+            (item) => `
+              <li>
+                ${escapeHTML(item.name)}
+              </li>
+            `
+          )
+          .join("")
+      : "<li>Your cart is empty.</li>";
+  }
+}
+
+function setupOrderForm() {
+  const form = document.querySelector("#orderForm");
+  const message = document.querySelector("#orderMessage");
 
   if (!form) return;
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    const password = $("#ownerPassword")?.value || "";
-    const confirmPassword =
-      $("#ownerConfirmPassword")?.value || "";
+    hideMessage(message);
 
-    const message = $("#ownerStatusMessage");
+    const submitButton =
+      form.querySelector('button[type="submit"]');
 
-    if (password.length < 8) {
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
+
+    const formData = new FormData(form);
+
+    const cart = getCart();
+
+    const itemsFromCart = cart
+      .map((item) => item.name)
+      .join(", ");
+
+    const manualItems =
+      String(formData.get("items") || "").trim();
+
+    const items =
+      manualItems || itemsFromCart;
+
+    if (!items) {
       showMessage(
         message,
-        "Please choose a password with at least 8 characters.",
+        "Please select or enter an item before ordering.",
         "error"
       );
+
+      if (submitButton) {
+        submitButton.disabled = false;
+      }
 
       return;
     }
 
-    if (password !== confirmPassword) {
+    const payload = {
+      name: String(formData.get("name") || "").trim(),
+      phone: String(formData.get("phone") || "").trim(),
+      email: String(formData.get("email") || "").trim(),
+      items,
+      address: String(
+        formData.get("address") || ""
+      ).trim()
+    };
+
+    try {
+      const data = await apiRequest(
+        "/api/orders",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      showMessage(
+        message,
+        data.message ||
+          "Your order has been received.",
+        "success"
+      );
+
+      form.reset();
+
+      saveCart([]);
+      updateCartDisplay();
+    } catch (error) {
+      showMessage(
+        message,
+        error.message ||
+          "Unable to submit your order.",
+        "error"
+      );
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+      }
+    }
+  });
+}
+
+// --------------------------------------------------
+// Categories
+// --------------------------------------------------
+
+function setupCategories() {
+  document
+    .querySelectorAll(".category-card")
+    .forEach((card) => {
+      card.addEventListener("click", () => {
+        const category =
+          card.dataset.category ||
+          card.querySelector("h3")
+            ?.textContent
+            ?.trim();
+
+        if (!category) return;
+
+        const cards =
+          document.querySelectorAll(".pet-card");
+
+        let found = false;
+
+        cards.forEach((petCard) => {
+          const petCategory =
+            petCard
+              .querySelector(".pet-category")
+              ?.textContent
+              ?.trim()
+              ?.toLowerCase();
+
+          const wanted =
+            category.toLowerCase();
+
+          const show =
+            wanted === "everything" ||
+            wanted === "other pets" ||
+            petCategory === wanted;
+
+          petCard.hidden = !show;
+
+          if (show) found = true;
+        });
+
+        if (found) {
+          document
+            .querySelector("#pets")
+            ?.scrollIntoView({
+              behavior: "smooth"
+            });
+        }
+      });
+    });
+}
+
+// --------------------------------------------------
+// Owner setup
+// --------------------------------------------------
+
+async function checkOwnerStatus() {
+  const setupSection =
+    document.querySelector("#ownerSetup");
+
+  const loginSection =
+    document.querySelector("#ownerLogin");
+
+  if (!setupSection && !loginSection) return;
+
+  try {
+    const data = await apiRequest(
+      "/api/owner/status"
+    );
+
+    if (data.setupRequired) {
+      if (setupSection) {
+        setupSection.hidden = false;
+      }
+
+      if (loginSection) {
+        loginSection.hidden = true;
+      }
+    } else {
+      if (setupSection) {
+        setupSection.hidden = true;
+      }
+
+      if (loginSection) {
+        loginSection.hidden = false;
+      }
+    }
+  } catch (error) {
+    console.error(
+      "Owner status error:",
+      error
+    );
+  }
+}
+
+function setupOwnerSetupForm() {
+  const form =
+    document.querySelector("#ownerSetupForm");
+
+  const password =
+    document.querySelector("#ownerPassword");
+
+  const confirmPassword =
+    document.querySelector("#ownerConfirmPassword");
+
+  const message =
+    document.querySelector("#ownerStatusMessage");
+
+  if (!form) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    hideMessage(message);
+
+    if (!password || !confirmPassword) return;
+
+    if (password.value !== confirmPassword.value) {
       showMessage(
         message,
         "The passwords do not match.",
@@ -611,326 +699,248 @@ function setupOwnerSetupForm() {
       return;
     }
 
-    try {
-      await apiRequest("/api/owner/setup", {
-        method: "POST",
-        body: JSON.stringify({
-          password
-        })
-      });
-
-      form.reset();
-
+    if (password.value.length < 8) {
       showMessage(
         message,
-        "Owner account created successfully. You can now log in.",
-        "success"
-      );
-
-      await checkOwnerStatus();
-
-    } catch (error) {
-      showMessage(
-        message,
-        error.message || "Owner setup failed.",
-        "error"
-      );
-    }
-  });
-}
-
-
-/* =========================================================
-   OWNER LOGIN
-   ========================================================= */
-
-function setupOwnerLoginForm() {
-  const form = $("#ownerLoginForm");
-
-  if (!form) return;
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const password = $("#ownerLoginPassword")?.value || "";
-    const message = $("#ownerStatusMessage");
-    const submitButton = form.querySelector("button[type='submit']");
-
-    if (!password) {
-      showMessage(
-        message,
-        "Please enter your owner password.",
+        "Password must be at least 8 characters.",
         "error"
       );
 
       return;
     }
 
-    if (submitButton) {
-      submitButton.disabled = true;
-      submitButton.textContent = "Logging in...";
-    }
-
     try {
-      await apiRequest("/api/owner/login", {
-        method: "POST",
-        body: JSON.stringify({
-          password
-        })
-      });
+      const data = await apiRequest(
+        "/api/owner/setup",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            password: password.value
+          })
+        }
+      );
+
+      // Clear password fields immediately.
+      password.value = "";
+      confirmPassword.value = "";
+
+      showMessage(
+        message,
+        data.message ||
+          "Owner account created successfully.",
+        "success"
+      );
 
       form.reset();
 
-      showMessage(
-        message,
-        "Owner login successful.",
-        "success"
-      );
-
-      showOwnerDashboard();
-
-      await loadOwnerDashboard();
-
+      setTimeout(() => {
+        showOwnerDashboard();
+      }, 500);
     } catch (error) {
       showMessage(
         message,
-        error.message || "Invalid owner password.",
+        error.message ||
+          "Unable to create owner account.",
         "error"
       );
-
-    } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.textContent = "Owner Login";
-      }
     }
   });
 }
 
+// --------------------------------------------------
+// Owner login
+// --------------------------------------------------
 
-/* =========================================================
-   OWNER DASHBOARD VISIBILITY
-   ========================================================= */
+function setupOwnerLoginForm() {
+  const form =
+    document.querySelector("#ownerLoginForm");
 
-function showOwnerDashboard() {
-  const dashboard = $("#ownerDashboard");
-  const loginArea = $("#ownerLogin");
-  const setupArea = $("#ownerSetup");
+  const password =
+    document.querySelector("#ownerLoginPassword");
 
-  if (dashboard) {
-    dashboard.classList.add("active");
-  }
+  const message =
+    document.querySelector("#ownerStatusMessage");
 
-  if (loginArea) {
-    loginArea.classList.add("hidden");
-  }
+  if (!form) return;
 
-  if (setupArea) {
-    setupArea.classList.add("hidden");
-  }
-}
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
 
-function hideOwnerDashboard() {
-  const dashboard = $("#ownerDashboard");
-  const loginArea = $("#ownerLogin");
+    hideMessage(message);
 
-  if (dashboard) {
-    dashboard.classList.remove("active");
-  }
+    if (!password) return;
 
-  if (loginArea) {
-    loginArea.classList.remove("hidden");
-  }
-}
-
-
-/* =========================================================
-   OWNER LOGOUT
-   ========================================================= */
-
-function setupOwnerLogout() {
-  const button = $("#ownerLogout");
-
-  if (!button) return;
-
-  button.addEventListener("click", async () => {
     try {
-      await apiRequest("/api/owner/logout", {
-        method: "POST"
-      });
+      const data = await apiRequest(
+        "/api/owner/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            password: password.value
+          })
+        }
+      );
 
-      hideOwnerDashboard();
-
-      const message = $("#ownerStatusMessage");
+      password.value = "";
 
       showMessage(
         message,
-        "You have been logged out successfully.",
+        data.message ||
+          "Owner login successful.",
         "success"
       );
 
-      await checkOwnerStatus();
-
+      await showOwnerDashboard();
     } catch (error) {
-      console.error("Logout failed:", error);
+      password.value = "";
 
-      alert("Logout failed. Please try again.");
+      showMessage(
+        message,
+        error.message ||
+          "Unable to log in.",
+        "error"
+      );
     }
   });
 }
 
+// --------------------------------------------------
+// Owner dashboard
+// --------------------------------------------------
 
-/* =========================================================
-   OWNER DASHBOARD DATA
-   ========================================================= */
-
-async function loadOwnerDashboard() {
+async function showOwnerDashboard() {
   try {
-    await Promise.all([
-      loadOwnerPets(),
-      loadOwnerInquiries(),
-      loadOwnerOrders()
-    ]);
+    await apiRequest("/api/owner/me");
 
-  } catch (error) {
-    console.error("Dashboard loading error:", error);
+    const dashboard =
+      document.querySelector("#ownerDashboard");
+
+    const login =
+      document.querySelector("#ownerLogin");
+
+    const setup =
+      document.querySelector("#ownerSetup");
+
+    if (dashboard) dashboard.hidden = false;
+    if (login) login.hidden = true;
+    if (setup) setup.hidden = true;
+
+    await loadOwnerPets();
+    await loadOwnerInquiries();
+    await loadOwnerOrders();
+  } catch {
+    const dashboard =
+      document.querySelector("#ownerDashboard");
+
+    if (dashboard) {
+      dashboard.hidden = true;
+    }
   }
 }
 
+async function checkExistingOwnerSession() {
+  try {
+    await apiRequest("/api/owner/me");
 
-/* =========================================================
-   OWNER PETS
-   ========================================================= */
+    await showOwnerDashboard();
+  } catch {
+    await checkOwnerStatus();
+  }
+}
+
+// --------------------------------------------------
+// Owner pets
+// --------------------------------------------------
 
 async function loadOwnerPets() {
-  const gallery = $("#ownerPetGallery");
+  const gallery =
+    document.querySelector("#ownerPetGallery");
 
   if (!gallery) return;
 
   try {
     const data = await apiRequest("/api/pets");
 
-    const pets = Array.isArray(data)
-      ? data
-      : Array.isArray(data.pets)
-        ? data.pets
-        : [];
+    const pets = Array.isArray(data.pets)
+      ? data.pets
+      : [];
 
-    if (pets.length === 0) {
-      gallery.innerHTML = `
-        <p class="empty-message">
-          No pets have been added yet.
-        </p>
-      `;
+    gallery.innerHTML = pets.length
+      ? pets
+          .map(
+            (pet) => `
+              <article class="owner-pet">
+                ${
+                  pet.image_url
+                    ? `
+                      <img
+                        src="${escapeHTML(
+                          apiUrl(pet.image_url)
+                        )}"
+                        alt="${escapeHTML(
+                          pet.name
+                        )}"
+                        loading="lazy"
+                      >
+                    `
+                    : `
+                      <div class="pet-image-placeholder">
+                        🐾
+                      </div>
+                    `
+                }
 
-      return;
-    }
+                <h4>
+                  ${escapeHTML(pet.name)}
+                </h4>
 
-    gallery.innerHTML = pets.map((pet) => {
-      const image =
-        pet.image_url ||
-        pet.imageUrl ||
-        "https://placehold.co/800x500?text=Pet";
+                <p>
+                  ${escapeHTML(pet.description)}
+                </p>
 
-      return `
-        <div class="owner-gallery-item">
+                <button
+                  type="button"
+                  class="delete-pet"
+                  data-pet-id="${escapeHTML(
+                    pet.id
+                  )}"
+                >
+                  Delete
+                </button>
+              </article>
+            `
+          )
+          .join("")
+      : "<p>No pets have been added yet.</p>";
 
-          <img
-            src="${escapeHTML(image)}"
-            alt="${escapeHTML(pet.name)}"
-          >
-
-          <button
-            type="button"
-            class="delete-btn delete-pet-btn"
-            data-id="${escapeHTML(pet.id)}"
-          >
-            Delete
-          </button>
-
-        </div>
-      `;
-    }).join("");
-
-    $$(".delete-pet-btn").forEach((button) => {
-      button.addEventListener("click", async () => {
-        await deletePet(button.dataset.id);
+    gallery
+      .querySelectorAll(".delete-pet")
+      .forEach((button) => {
+        button.addEventListener(
+          "click",
+          () => deletePet(button.dataset.petId)
+        );
       });
-    });
-
   } catch (error) {
-    console.error("Could not load owner pets:", error);
-
     gallery.innerHTML = `
-      <p class="message error">
-        Could not load your pet gallery.
+      <p class="error-message">
+        ${escapeHTML(error.message)}
       </p>
     `;
   }
 }
 
-
-/* =========================================================
-   ADD PET
-   ========================================================= */
-
-function setupAddPetForm() {
-  const form = $("#addPetForm");
-
-  if (!form) return;
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const submitButton = form.querySelector("button[type='submit']");
-
-    const formData = new FormData(form);
-
-    if (submitButton) {
-      submitButton.disabled = true;
-      submitButton.textContent = "Uploading...";
-    }
-
-    try {
-      await apiRequest("/api/pets", {
-        method: "POST",
-        body: formData
-      });
-
-      form.reset();
-
-      alert("Pet added successfully.");
-
-      await loadPets();
-      await loadOwnerPets();
-
-    } catch (error) {
-      console.error("Add pet failed:", error);
-
-      alert(
-        error.message ||
-        "The pet could not be added. Please try again."
-      );
-
-    } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.textContent = "Add Pet";
-      }
-    }
-  });
-}
-
-
-/* =========================================================
-   DELETE PET
-   ========================================================= */
-
 async function deletePet(petId) {
   if (!petId) return;
 
-  const confirmed = confirm(
-    "Are you sure you want to delete this pet?"
+  const confirmed = window.confirm(
+    "Delete this pet from the store?"
   );
 
   if (!confirmed) return;
@@ -945,176 +955,234 @@ async function deletePet(petId) {
 
     await loadPets();
     await loadOwnerPets();
-
   } catch (error) {
-    console.error("Delete pet failed:", error);
-
-    alert(
+    window.alert(
       error.message ||
-      "The pet could not be deleted."
+        "Unable to delete pet."
     );
   }
 }
 
+// --------------------------------------------------
+// Add pet
+// --------------------------------------------------
 
-/* =========================================================
-   OWNER INQUIRIES
-   ========================================================= */
+function setupAddPetForm() {
+  const form =
+    document.querySelector("#addPetForm");
+
+  if (!form) return;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const submitButton =
+      form.querySelector('button[type="submit"]');
+
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
+
+    try {
+      const formData = new FormData(form);
+
+      await apiRequest("/api/pets", {
+        method: "POST",
+        body: formData
+      });
+
+      form.reset();
+
+      await loadPets();
+      await loadOwnerPets();
+
+      window.alert(
+        "Pet added successfully."
+      );
+    } catch (error) {
+      window.alert(
+        error.message ||
+          "Unable to add pet."
+      );
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+      }
+    }
+  });
+}
+
+// --------------------------------------------------
+// Owner inquiries
+// --------------------------------------------------
 
 async function loadOwnerInquiries() {
-  const container = $("#ownerInquiries");
+  const container =
+    document.querySelector("#ownerInquiries");
 
   if (!container) return;
 
   try {
-    const data = await apiRequest("/api/owner/inquiries");
+    const data = await apiRequest(
+      "/api/owner/inquiries"
+    );
 
-    const inquiries = Array.isArray(data)
-      ? data
-      : Array.isArray(data.inquiries)
-        ? data.inquiries
-        : [];
+    const inquiries = Array.isArray(
+      data.inquiries
+    )
+      ? data.inquiries
+      : [];
 
-    if (inquiries.length === 0) {
-      container.innerHTML = `
-        <p class="empty-message">
-          No inquiries yet.
-        </p>
-      `;
+    container.innerHTML = inquiries.length
+      ? inquiries
+          .map(
+            (item) => `
+              <article class="owner-inquiry">
+                <h4>
+                  ${escapeHTML(item.name)}
+                </h4>
 
-      return;
-    }
+                <p>
+                  <strong>Pet:</strong>
+                  ${escapeHTML(item.pet)}
+                </p>
 
-    container.innerHTML = inquiries.map((inquiry) => `
-      <div class="owner-list-item">
+                <p>
+                  <strong>Phone:</strong>
+                  ${escapeHTML(item.phone)}
+                </p>
 
-        <strong>
-          ${escapeHTML(inquiry.name)}
-        </strong>
+                ${
+                  item.email
+                    ? `
+                      <p>
+                        <strong>Email:</strong>
+                        ${escapeHTML(
+                          item.email
+                        )}
+                      </p>
+                    `
+                    : ""
+                }
 
-        <p>
-          Pet:
-          ${escapeHTML(inquiry.pet || "General inquiry")}
-        </p>
-
-        <p>
-          Phone:
-          ${escapeHTML(inquiry.phone)}
-        </p>
-
-        <p>
-          Email:
-          ${escapeHTML(inquiry.email || "Not provided")}
-        </p>
-
-        <p>
-          ${escapeHTML(inquiry.message)}
-        </p>
-
-        <small>
-          ${formatDate(inquiry.created_at)}
-        </small>
-
-      </div>
-    `).join("");
-
+                <p>
+                  ${escapeHTML(item.message)}
+                </p>
+              </article>
+            `
+          )
+          .join("")
+      : "<p>No inquiries yet.</p>";
   } catch (error) {
-    console.error("Could not load inquiries:", error);
-
     container.innerHTML = `
-      <p class="message error">
-        Could not load inquiries.
+      <p class="error-message">
+        ${escapeHTML(error.message)}
       </p>
     `;
   }
 }
 
-
-/* =========================================================
-   OWNER ORDERS
-   ========================================================= */
+// --------------------------------------------------
+// Owner orders
+// --------------------------------------------------
 
 async function loadOwnerOrders() {
-  const container = $("#ownerOrders");
+  const container =
+    document.querySelector("#ownerOrders");
 
   if (!container) return;
 
   try {
-    const data = await apiRequest("/api/owner/orders");
+    const data = await apiRequest(
+      "/api/owner/orders"
+    );
 
-    const orders = Array.isArray(data)
-      ? data
-      : Array.isArray(data.orders)
-        ? data.orders
-        : [];
+    const orders = Array.isArray(data.orders)
+      ? data.orders
+      : [];
 
-    if (orders.length === 0) {
-      container.innerHTML = `
-        <p class="empty-message">
-          No orders yet.
-        </p>
-      `;
+    container.innerHTML = orders.length
+      ? orders
+          .map(
+            (order) => `
+              <article class="owner-order">
+                <h4>
+                  ${escapeHTML(order.name)}
+                </h4>
 
-      return;
-    }
+                <p>
+                  <strong>Phone:</strong>
+                  ${escapeHTML(order.phone)}
+                </p>
 
-    container.innerHTML = orders.map((order) => `
-      <div class="owner-list-item">
+                <p>
+                  <strong>Items:</strong>
+                  ${escapeHTML(order.items)}
+                </p>
 
-        <strong>
-          ${escapeHTML(order.name)}
-        </strong>
+                <p>
+                  <strong>Address:</strong>
+                  ${escapeHTML(order.address)}
+                </p>
 
-        <p>
-          Phone:
-          ${escapeHTML(order.phone)}
-        </p>
-
-        <p>
-          Email:
-          ${escapeHTML(order.email || "Not provided")}
-        </p>
-
-        <p>
-          Items:
-          ${escapeHTML(order.items)}
-        </p>
-
-        <p>
-          Address:
-          ${escapeHTML(order.address)}
-        </p>
-
-        <p>
-          Status:
-          ${escapeHTML(order.status || "pending")}
-        </p>
-
-        <small>
-          ${formatDate(order.created_at)}
-        </small>
-
-      </div>
-    `).join("");
-
+                <p>
+                  <strong>Status:</strong>
+                  ${escapeHTML(order.status)}
+                </p>
+              </article>
+            `
+          )
+          .join("")
+      : "<p>No orders yet.</p>";
   } catch (error) {
-    console.error("Could not load orders:", error);
-
     container.innerHTML = `
-      <p class="message error">
-        Could not load orders.
+      <p class="error-message">
+        ${escapeHTML(error.message)}
       </p>
     `;
   }
 }
 
+// --------------------------------------------------
+// Logout
+// --------------------------------------------------
 
-/* =========================================================
-   CHANGE OWNER PASSWORD
-   ========================================================= */
+function setupOwnerLogout() {
+  const button =
+    document.querySelector("#ownerLogout");
+
+  if (!button) return;
+
+  button.addEventListener("click", async () => {
+    try {
+      await apiRequest(
+        "/api/owner/logout",
+        {
+          method: "POST"
+        }
+      );
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+
+    const dashboard =
+      document.querySelector("#ownerDashboard");
+
+    if (dashboard) {
+      dashboard.hidden = true;
+    }
+
+    await checkOwnerStatus();
+  });
+}
+
+// --------------------------------------------------
+// Change password
+// --------------------------------------------------
 
 function setupChangePasswordForm() {
-  const form = $("#changePasswordForm");
+  const form =
+    document.querySelector("#changePasswordForm");
 
   if (!form) return;
 
@@ -1122,278 +1190,86 @@ function setupChangePasswordForm() {
     event.preventDefault();
 
     const currentPassword =
-      $("#currentPassword")?.value || "";
+      document.querySelector("#currentPassword");
 
     const newPassword =
-      $("#newPassword")?.value || "";
+      document.querySelector("#newPassword");
 
     const confirmPassword =
-      $("#confirmNewPassword")?.value || "";
+      document.querySelector("#confirmNewPassword");
 
-    if (!currentPassword || !newPassword) {
-      alert("Please complete all password fields.");
-
+    if (
+      !currentPassword ||
+      !newPassword ||
+      !confirmPassword
+    ) {
       return;
     }
 
-    if (newPassword.length < 8) {
-      alert(
-        "Your new password must contain at least 8 characters."
+    if (
+      newPassword.value !==
+      confirmPassword.value
+    ) {
+      window.alert(
+        "The new passwords do not match."
       );
-
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      alert("The new passwords do not match.");
 
       return;
     }
 
     try {
-      await apiRequest("/api/owner/change-password", {
-        method: "POST",
-        body: JSON.stringify({
-          currentPassword,
-          newPassword
-        })
-      });
+      await apiRequest(
+        "/api/owner/change-password",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            currentPassword:
+              currentPassword.value,
+
+            newPassword:
+              newPassword.value
+          })
+        }
+      );
 
       form.reset();
 
-      alert(
-        "Your owner password has been changed successfully."
+      window.alert(
+        "Password changed successfully."
       );
-
     } catch (error) {
-      console.error("Password change failed:", error);
-
-      alert(
+      window.alert(
         error.message ||
-        "The password could not be changed."
+          "Unable to change password."
       );
     }
   });
 }
 
+// --------------------------------------------------
+// Start everything
+// --------------------------------------------------
 
-/* =========================================================
-   CATEGORY BUTTONS
-   ========================================================= */
+document.addEventListener(
+  "DOMContentLoaded",
+  async () => {
+    setupNavigation();
+    setupInquiryForm();
+    setupOrderForm();
+    setupCart();
+    setupCategories();
 
-function setupCategoryButtons() {
-  $$(".category-card").forEach((card) => {
-    card.addEventListener("click", () => {
-      const category =
-        card.dataset.category ||
-        card.querySelector("h3")?.textContent ||
-        "";
+    setupOwnerSetupForm();
+    setupOwnerLoginForm();
+    setupAddPetForm();
+    setupOwnerLogout();
+    setupChangePasswordForm();
 
-      const petGrid = $("#petGrid");
+    await loadPets();
 
-      if (petGrid) {
-        petGrid.scrollIntoView({
-          behavior: "smooth",
-          block: "start"
-        });
-      }
-
-      filterPetsByCategory(category);
-    });
-  });
-}
-
-function filterPetsByCategory(category) {
-  const cards = $$(".pet-card");
-
-  if (!cards.length) return;
-
-  const normalizedCategory =
-    category.toLowerCase().trim();
-
-  cards.forEach((card) => {
-    const text =
-      card.textContent.toLowerCase();
-
-    const matches =
-      normalizedCategory.includes("other") ||
-      normalizedCategory.includes("everything") ||
-      text.includes(normalizedCategory);
-
-    card.style.display = matches ? "" : "none";
-  });
-}
-
-
-/* =========================================================
-   PRODUCT CART — SIMPLE DEMO
-   ========================================================= */
-
-let cart = [];
-
-function loadCart() {
-  try {
-    const saved = localStorage.getItem("petStoreCart");
-
-    cart = saved ? JSON.parse(saved) : [];
-
-    if (!Array.isArray(cart)) {
-      cart = [];
-    }
-
-  } catch {
-    cart = [];
+    await checkExistingOwnerSession();
   }
-}
-
-function saveCart() {
-  try {
-    localStorage.setItem(
-      "petStoreCart",
-      JSON.stringify(cart)
-    );
-  } catch {
-    console.warn("Could not save cart.");
-  }
-}
-
-function setupProductButtons() {
-  $$(".add-to-cart").forEach((button) => {
-    button.addEventListener("click", () => {
-      const card = button.closest(".product-card");
-
-      if (!card) return;
-
-      const name =
-        card.querySelector("h3")?.textContent?.trim() ||
-        "Product";
-
-      const price =
-        card.querySelector(".product-price")?.textContent?.trim() ||
-        "";
-
-      cart.push({
-        name,
-        price
-      });
-
-      saveCart();
-
-      button.textContent = "Added ✓";
-
-      setTimeout(() => {
-        button.textContent = "Add to Cart";
-      }, 1500);
-    });
-  });
-}
-
-
-/* =========================================================
-   IMAGE PREVIEW
-   ========================================================= */
-
-function setupImagePreview() {
-  const input = $("#petImage");
-  const form = $("#addPetForm");
-
-  if (!input || !form) return;
-
-  let preview = $("#petImagePreview");
-
-  if (!preview) {
-    preview = document.createElement("img");
-
-    preview.id = "petImagePreview";
-
-    preview.style.maxWidth = "100%";
-    preview.style.maxHeight = "250px";
-    preview.style.marginTop = "15px";
-    preview.style.borderRadius = "10px";
-    preview.style.display = "none";
-
-    input.parentElement?.appendChild(preview);
-  }
-
-  input.addEventListener("change", () => {
-    const file = input.files?.[0];
-
-    if (!file) {
-      preview.style.display = "none";
-      preview.removeAttribute("src");
-      return;
-    }
-
-    if (!file.type.startsWith("image/")) {
-      alert("Please select an image file.");
-
-      input.value = "";
-
-      preview.style.display = "none";
-
-      return;
-    }
-
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      preview.src = reader.result;
-      preview.style.display = "block";
-    };
-
-    reader.readAsDataURL(file);
-  });
-}
-
-
-/* =========================================================
-   START EVERYTHING
-   ========================================================= */
-
-document.addEventListener("DOMContentLoaded", async () => {
-
-  setupNavigation();
-
-  setupInquiryForm();
-
-  setupOrderForm();
-
-  setupOwnerSetupForm();
-
-  setupOwnerLoginForm();
-
-  setupOwnerLogout();
-
-  setupAddPetForm();
-
-  setupChangePasswordForm();
-
-  setupCategoryButtons();
-
-  setupProductButtons();
-
-  setupImagePreview();
-
-  loadCart();
-
-  await loadPets();
-
-  await checkOwnerStatus();
-
-});
-
-
-/* =========================================================
-   SECURITY NOTE
-   =========================================================
-
-   No owner password is stored in this JavaScript.
-
-   The password is sent to the backend over HTTPS and should
-   be hashed and stored by the server.
-
-   The backend must always enforce owner permissions.
-
-   Never rely on hiding HTML elements or JavaScript alone
-   to protect the Owner Dashboard.
-   ========================================================= */
+);
