@@ -1,64 +1,104 @@
+
 import express from "express";
+import cors from "cors";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { randomUUID } from "crypto";
+import crypto from "crypto";
 
-import {
-  query,
-  initializeDatabase
-} from "./database.js";
-
-const app = express();
-
-const PORT = process.env.PORT || 3000;
+import { query, initializeDatabase } from "./database.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-/* =========================================================
-   BASIC CONFIGURATION
-   ========================================================= */
+const isProduction = process.env.NODE_ENV === "production";
 
-app.use(express.json({ limit: "2mb" }));
-app.use(express.urlencoded({ extended: true }));
+// --------------------------------------------------
+// Basic configuration
+// --------------------------------------------------
 
+app.set("trust proxy", 1);
 
-/* =========================================================
-   UPLOADS FOLDER
-   ========================================================= */
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-const uploadsDirectory = path.join(__dirname, "uploads");
+// --------------------------------------------------
+// CORS
+// --------------------------------------------------
 
-if (!fs.existsSync(uploadsDirectory)) {
-  fs.mkdirSync(uploadsDirectory, {
-    recursive: true
-  });
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:5500",
+  "http://127.0.0.1:5500",
+  "http://localhost:3000"
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow requests with no Origin header, such as some server-side tools.
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Origin not allowed by CORS."));
+    },
+    credentials: true
+  })
+);
+
+// --------------------------------------------------
+// Upload directory
+// --------------------------------------------------
+
+const uploadDir = path.join(__dirname, "uploads");
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+// --------------------------------------------------
+// Image upload configuration
+// --------------------------------------------------
 
-/* =========================================================
-   IMAGE UPLOAD
-   ========================================================= */
+const allowedMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif"
+]);
+
+const allowedExtensions = new Set([
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif"
+]);
 
 const storage = multer.diskStorage({
   destination: (_req, _file, callback) => {
-    callback(null, uploadsDirectory);
+    callback(null, uploadDir);
   },
 
   filename: (_req, file, callback) => {
-    const extension =
-      path.extname(file.originalname).toLowerCase();
+    const extension = path
+      .extname(file.originalname || "")
+      .toLowerCase();
 
-    callback(
-      null,
-      `${randomUUID()}${extension}`
-    );
+    callback(null, `${crypto.randomUUID()}${extension}`);
   }
 });
 
@@ -70,41 +110,51 @@ const upload = multer({
   },
 
   fileFilter: (_req, file, callback) => {
-    const allowedTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-      "image/gif"
-    ];
+    const extension = path
+      .extname(file.originalname || "")
+      .toLowerCase();
 
-    if (!allowedTypes.includes(file.mimetype)) {
-      return callback(
-        new Error(
-          "Only JPG, PNG, WEBP and GIF images are allowed."
-        )
-      );
+    if (
+      allowedMimeTypes.has(file.mimetype) &&
+      allowedExtensions.has(extension)
+    ) {
+      return callback(null, true);
     }
 
-    callback(null, true);
+    callback(
+      new Error(
+        "Only JPG, JPEG, PNG, WEBP and GIF images are allowed."
+      )
+    );
   }
 });
 
-app.use(
-  "/uploads",
-  express.static(uploadsDirectory)
-);
+app.use("/uploads", express.static(uploadDir));
 
+// --------------------------------------------------
+// Session configuration
+// --------------------------------------------------
 
-/* =========================================================
-   SESSION
-   ========================================================= */
+const PgSession = connectPgSimple(session);
+
+if (isProduction && !process.env.SESSION_SECRET) {
+  throw new Error(
+    "SESSION_SECRET must be configured in production."
+  );
+}
 
 const sessionSecret =
   process.env.SESSION_SECRET ||
-  "CHANGE_THIS_SESSION_SECRET_BEFORE_PRODUCTION";
+  "development-only-change-this-secret";
 
 app.use(
   session({
+    store: new PgSession({
+      pool: undefined,
+      tableName: "user_sessions",
+      createTableIfMissing: true
+    }),
+
     secret: sessionSecret,
 
     resave: false,
@@ -113,117 +163,114 @@ app.use(
 
     cookie: {
       httpOnly: true,
-
-      secure:
-        process.env.NODE_ENV === "production",
-
-      sameSite: "lax",
-
-      maxAge: 1000 * 60 * 60 * 8
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 1000 * 60 * 60 * 24
     }
   })
 );
 
-
-/* =========================================================
-   LOGIN RATE LIMIT
-   ========================================================= */
+// --------------------------------------------------
+// Login rate limiting
+// --------------------------------------------------
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-
-  max: 10,
+  limit: 10,
 
   standardHeaders: true,
-
   legacyHeaders: false,
 
   message: {
-    message:
-      "Too many login attempts. Please try again later."
+    error: "Too many login attempts. Please try again later."
   }
 });
 
+// --------------------------------------------------
+// Helper functions
+// --------------------------------------------------
 
-/* =========================================================
-   OWNER AUTHORIZATION
-   ========================================================= */
+function cleanText(value, maxLength = 1000) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim().slice(0, maxLength);
+}
+
+function validPassword(password) {
+  return (
+    typeof password === "string" &&
+    password.length >= 8 &&
+    password.length <= 128
+  );
+}
 
 function requireOwner(req, res, next) {
   if (!req.session.ownerId) {
     return res.status(401).json({
-      message:
-        "Owner authentication is required."
+      error: "Owner authentication required."
     });
   }
 
   next();
 }
 
-
-/* =========================================================
-   HEALTH CHECK
-   ========================================================= */
+// --------------------------------------------------
+// Health check
+// --------------------------------------------------
 
 app.get("/api/health", async (_req, res) => {
   try {
-    await query("SELECT NOW()");
+    await query("SELECT 1");
 
     res.json({
-      status: "ok",
-      message: "Pet Store API is running."
+      ok: true,
+      message: "Pet Store backend is running."
     });
-
   } catch (error) {
-    console.error(error);
+    console.error("Health check failed:", error);
 
     res.status(500).json({
-      status: "error",
-      message: "Database connection failed."
+      ok: false,
+      error: "Database connection failed."
     });
   }
 });
 
-
-/* =========================================================
-   OWNER STATUS
-   ========================================================= */
+// --------------------------------------------------
+// Owner status
+// --------------------------------------------------
 
 app.get("/api/owner/status", async (_req, res) => {
   try {
     const result = await query(
-      "SELECT id FROM owners LIMIT 1"
+      "SELECT COUNT(*)::int AS count FROM owners"
     );
 
     res.json({
-      ownerExists: result.rows.length > 0
+      setupRequired: result.rows[0].count === 0
     });
-
   } catch (error) {
-    console.error(error);
+    console.error("Owner status error:", error);
 
     res.status(500).json({
-      message: "Could not check owner status."
+      error: "Unable to check owner status."
     });
   }
 });
 
+// --------------------------------------------------
+// Owner setup
+// --------------------------------------------------
 
-/* =========================================================
-   OWNER SETUP
-   ========================================================= */
-
-app.post("/api/owner/setup", async (req, res) => {
+app.post("/api/owner/setup", loginLimiter, async (req, res) => {
   try {
-    const { password } = req.body;
+    const password = req.body?.password;
 
-    if (
-      typeof password !== "string" ||
-      password.length < 8
-    ) {
+    if (!validPassword(password)) {
       return res.status(400).json({
-        message:
-          "Password must contain at least 8 characters."
+        error: "Password must be between 8 and 128 characters."
       });
     }
 
@@ -233,13 +280,11 @@ app.post("/api/owner/setup", async (req, res) => {
 
     if (existing.rows.length > 0) {
       return res.status(409).json({
-        message:
-          "The owner account has already been created."
+        error: "Owner account has already been created."
       });
     }
 
-    const passwordHash =
-      await bcrypt.hash(password, 12);
+    const passwordHash = await bcrypt.hash(password, 12);
 
     const result = await query(
       `
@@ -250,166 +295,123 @@ app.post("/api/owner/setup", async (req, res) => {
       [passwordHash]
     );
 
-    req.session.ownerId =
-      result.rows[0].id;
+    req.session.ownerId = result.rows[0].id;
 
     res.status(201).json({
-      message:
-        "Owner account created successfully."
+      message: "Owner account created successfully."
     });
-
   } catch (error) {
-    console.error(error);
+    console.error("Owner setup error:", error);
 
     res.status(500).json({
-      message: "Owner setup failed."
+      error: "Unable to create owner account."
     });
   }
 });
 
+// --------------------------------------------------
+// Owner login
+// --------------------------------------------------
 
-/* =========================================================
-   OWNER LOGIN
-   ========================================================= */
+app.post("/api/owner/login", loginLimiter, async (req, res) => {
+  try {
+    const password = req.body?.password;
 
-app.post(
-  "/api/owner/login",
-  loginLimiter,
-  async (req, res) => {
-    try {
-      const { password } = req.body;
-
-      if (
-        typeof password !== "string" ||
-        !password
-      ) {
-        return res.status(400).json({
-          message:
-            "Please enter your password."
-        });
-      }
-
-      const result = await query(
-        `
-        SELECT id, password_hash
-        FROM owners
-        LIMIT 1
-        `
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          message:
-            "Owner account has not been created yet."
-        });
-      }
-
-      const owner = result.rows[0];
-
-      const valid =
-        await bcrypt.compare(
-          password,
-          owner.password_hash
-        );
-
-      if (!valid) {
-        return res.status(401).json({
-          message:
-            "Invalid owner password."
-        });
-      }
-
-      req.session.ownerId =
-        owner.id;
-
-      res.json({
-        message:
-          "Owner login successful."
-      });
-
-    } catch (error) {
-      console.error(error);
-
-      res.status(500).json({
-        message:
-          "Login could not be completed."
+    if (!password) {
+      return res.status(400).json({
+        error: "Password is required."
       });
     }
-  }
-);
 
+    const result = await query(
+      `
+      SELECT id, password_hash
+      FROM owners
+      LIMIT 1
+      `
+    );
 
-/* =========================================================
-   CURRENT OWNER SESSION
-   ========================================================= */
-
-app.get(
-  "/api/owner/me",
-  (req, res) => {
-    res.json({
-      authenticated:
-        Boolean(req.session.ownerId)
-    });
-  }
-);
-
-
-/* =========================================================
-   OWNER LOGOUT
-   ========================================================= */
-
-app.post(
-  "/api/owner/logout",
-  (req, res) => {
-    req.session.destroy((error) => {
-      if (error) {
-        console.error(error);
-
-        return res.status(500).json({
-          message:
-            "Logout failed."
-        });
-      }
-
-      res.clearCookie("connect.sid");
-
-      res.json({
-        message:
-          "Owner logged out successfully."
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Owner account has not been created yet."
       });
+    }
+
+    const owner = result.rows[0];
+
+    const passwordMatches = await bcrypt.compare(
+      password,
+      owner.password_hash
+    );
+
+    if (!passwordMatches) {
+      return res.status(401).json({
+        error: "Incorrect password."
+      });
+    }
+
+    req.session.ownerId = owner.id;
+
+    res.json({
+      message: "Owner login successful."
+    });
+  } catch (error) {
+    console.error("Owner login error:", error);
+
+    res.status(500).json({
+      error: "Unable to log in."
     });
   }
-);
+});
 
+// --------------------------------------------------
+// Current owner
+// --------------------------------------------------
 
-/* =========================================================
-   CHANGE OWNER PASSWORD
-   ========================================================= */
+app.get("/api/owner/me", requireOwner, async (req, res) => {
+  res.json({
+    authenticated: true,
+    ownerId: req.session.ownerId
+  });
+});
+
+// --------------------------------------------------
+// Owner logout
+// --------------------------------------------------
+
+app.post("/api/owner/logout", requireOwner, (req, res) => {
+  req.session.destroy((error) => {
+    if (error) {
+      console.error("Logout error:", error);
+
+      return res.status(500).json({
+        error: "Unable to log out."
+      });
+    }
+
+    res.clearCookie("connect.sid");
+
+    res.json({
+      message: "Logged out successfully."
+    });
+  });
+});
+
+// --------------------------------------------------
+// Change owner password
+// --------------------------------------------------
 
 app.post(
   "/api/owner/change-password",
   requireOwner,
   async (req, res) => {
     try {
-      const {
-        currentPassword,
-        newPassword
-      } = req.body;
+      const currentPassword = req.body?.currentPassword;
+      const newPassword = req.body?.newPassword;
 
-      if (
-        typeof currentPassword !== "string" ||
-        typeof newPassword !== "string"
-      ) {
+      if (!validPassword(newPassword)) {
         return res.status(400).json({
-          message:
-            "Both password fields are required."
-        });
-      }
-
-      if (newPassword.length < 8) {
-        return res.status(400).json({
-          message:
-            "New password must contain at least 8 characters."
+          error: "New password must be between 8 and 128 characters."
         });
       }
 
@@ -424,29 +426,22 @@ app.post(
 
       if (result.rows.length === 0) {
         return res.status(404).json({
-          message:
-            "Owner account not found."
+          error: "Owner account not found."
         });
       }
 
-      const valid =
-        await bcrypt.compare(
-          currentPassword,
-          result.rows[0].password_hash
-        );
+      const matches = await bcrypt.compare(
+        currentPassword || "",
+        result.rows[0].password_hash
+      );
 
-      if (!valid) {
+      if (!matches) {
         return res.status(401).json({
-          message:
-            "Current password is incorrect."
+          error: "Current password is incorrect."
         });
       }
 
-      const newHash =
-        await bcrypt.hash(
-          newPassword,
-          12
-        );
+      const newHash = await bcrypt.hash(newPassword, 12);
 
       await query(
         `
@@ -454,32 +449,25 @@ app.post(
         SET password_hash = $1
         WHERE id = $2
         `,
-        [
-          newHash,
-          req.session.ownerId
-        ]
+        [newHash, req.session.ownerId]
       );
 
       res.json({
-        message:
-          "Password changed successfully."
+        message: "Password changed successfully."
       });
-
     } catch (error) {
-      console.error(error);
+      console.error("Change password error:", error);
 
       res.status(500).json({
-        message:
-          "Password change failed."
+        error: "Unable to change password."
       });
     }
   }
 );
 
-
-/* =========================================================
-   PUBLIC PETS
-   ========================================================= */
+// --------------------------------------------------
+// Public pets
+// --------------------------------------------------
 
 app.get("/api/pets", async (_req, res) => {
   try {
@@ -502,21 +490,18 @@ app.get("/api/pets", async (_req, res) => {
     res.json({
       pets: result.rows
     });
-
   } catch (error) {
-    console.error(error);
+    console.error("Get pets error:", error);
 
     res.status(500).json({
-      message:
-        "Could not load pets."
+      error: "Unable to load pets."
     });
   }
 });
 
-
-/* =========================================================
-   OWNER — ADD PET
-   ========================================================= */
+// --------------------------------------------------
+// Owner adds pet
+// --------------------------------------------------
 
 app.post(
   "/api/pets",
@@ -524,87 +509,70 @@ app.post(
   upload.single("image"),
   async (req, res) => {
     try {
-      const {
-        name,
-        category,
-        description,
-        price
-      } = req.body;
+      const name = cleanText(req.body?.name, 100);
+      const category = cleanText(req.body?.category, 50);
+      const description = cleanText(
+        req.body?.description,
+        2000
+      );
 
-      if (
-        !name ||
-        !category ||
-        !description ||
-        price === undefined
-      ) {
+      const price = Number(req.body?.price);
+
+      if (!name || !category || !description) {
         return res.status(400).json({
-          message:
-            "Name, category, description and price are required."
+          error: "Name, category and description are required."
         });
       }
 
-      let imageUrl = null;
-
-      if (req.file) {
-        imageUrl =
-          `/uploads/${req.file.filename}`;
+      if (!Number.isFinite(price) || price < 0) {
+        return res.status(400).json({
+          error: "Please enter a valid price."
+        });
       }
+
+      const imageUrl = req.file
+        ? `/uploads/${req.file.filename}`
+        : null;
 
       const result = await query(
         `
-        INSERT INTO pets
-        (
+        INSERT INTO pets (
           name,
           category,
           description,
           price,
-          image_url
+          image_url,
+          likes
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, 0)
         RETURNING *
         `,
         [
-          name.trim(),
-          category.trim(),
-          description.trim(),
-          Number(price),
+          name,
+          category,
+          description,
+          price,
           imageUrl
         ]
       );
 
       res.status(201).json({
-        message:
-          "Pet added successfully.",
+        message: "Pet added successfully.",
         pet: result.rows[0]
       });
-
     } catch (error) {
-      console.error(error);
-
-      if (req.file) {
-        const uploadedFile =
-          path.join(
-            uploadsDirectory,
-            req.file.filename
-          );
-
-        if (fs.existsSync(uploadedFile)) {
-          fs.unlinkSync(uploadedFile);
-        }
-      }
+      console.error("Add pet error:", error);
 
       res.status(500).json({
-        message:
-          "Could not add pet."
+        error: "Unable to add pet."
       });
     }
   }
 );
 
-
-/* =========================================================
-   OWNER — DELETE PET
-   ========================================================= */
+// --------------------------------------------------
+// Owner deletes pet
+// --------------------------------------------------
 
 app.delete(
   "/api/pets/:id",
@@ -613,250 +581,190 @@ app.delete(
     try {
       const result = await query(
         `
-        SELECT image_url
-        FROM pets
+        DELETE FROM pets
         WHERE id = $1
+        RETURNING image_url
         `,
         [req.params.id]
       );
 
       if (result.rows.length === 0) {
         return res.status(404).json({
-          message:
-            "Pet not found."
+          error: "Pet not found."
         });
       }
 
-      const imageUrl =
-        result.rows[0].image_url;
+      const imageUrl = result.rows[0].image_url;
 
-      await query(
-        `
-        DELETE FROM pets
-        WHERE id = $1
-        `,
-        [req.params.id]
-      );
+      if (imageUrl) {
+        const filename = path.basename(imageUrl);
+        const imagePath = path.join(uploadDir, filename);
 
-      if (
-        imageUrl &&
-        imageUrl.startsWith("/uploads/")
-      ) {
-        const filename =
-          path.basename(imageUrl);
-
-        const imagePath =
-          path.join(
-            uploadsDirectory,
-            filename
-          );
-
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
+        try {
+          await fs.promises.unlink(imagePath);
+        } catch (error) {
+          if (error.code !== "ENOENT") {
+            console.error("Image deletion error:", error);
+          }
         }
       }
 
       res.json({
-        message:
-          "Pet deleted successfully."
+        message: "Pet deleted successfully."
       });
-
     } catch (error) {
-      console.error(error);
+      console.error("Delete pet error:", error);
 
       res.status(500).json({
-        message:
-          "Could not delete pet."
+        error: "Unable to delete pet."
       });
     }
   }
 );
 
+// --------------------------------------------------
+// Like a pet
+// --------------------------------------------------
 
-/* =========================================================
-   PET LIKE
-   ========================================================= */
+app.post("/api/pets/:id/like", async (req, res) => {
+  try {
+    const result = await query(
+      `
+      UPDATE pets
+      SET likes = likes + 1
+      WHERE id = $1
+      RETURNING id, likes
+      `,
+      [req.params.id]
+    );
 
-app.post(
-  "/api/pets/:id/like",
-  async (req, res) => {
-    try {
-      const result = await query(
-        `
-        UPDATE pets
-        SET likes = likes + 1
-        WHERE id = $1
-        RETURNING likes
-        `,
-        [req.params.id]
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          message:
-            "Pet not found."
-        });
-      }
-
-      res.json({
-        likes:
-          result.rows[0].likes
-      });
-
-    } catch (error) {
-      console.error(error);
-
-      res.status(500).json({
-        message:
-          "Could not record like."
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Pet not found."
       });
     }
+
+    res.json({
+      id: result.rows[0].id,
+      likes: result.rows[0].likes
+    });
+  } catch (error) {
+    console.error("Like pet error:", error);
+
+    res.status(500).json({
+      error: "Unable to like pet."
+    });
   }
-);
+});
 
+// --------------------------------------------------
+// Customer inquiry
+// --------------------------------------------------
 
-/* =========================================================
-   CUSTOMER INQUIRY
-   ========================================================= */
+app.post("/api/inquiries", async (req, res) => {
+  try {
+    const name = cleanText(req.body?.name, 100);
+    const phone = cleanText(req.body?.phone, 40);
+    const email = cleanText(req.body?.email, 150);
+    const pet = cleanText(req.body?.pet, 150);
+    const message = cleanText(req.body?.message, 2000);
 
-app.post(
-  "/api/inquiries",
-  async (req, res) => {
-    try {
-      const {
+    if (!name || !phone || !pet || !message) {
+      return res.status(400).json({
+        error:
+          "Name, phone, pet and message are required."
+      });
+    }
+
+    await query(
+      `
+      INSERT INTO inquiries (
         name,
         phone,
         email,
         pet,
         message
-      } = req.body;
+      )
+      VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        name,
+        phone,
+        email || null,
+        pet,
+        message
+      ]
+    );
 
-      if (
-        !name ||
-        !phone ||
-        !message
-      ) {
-        return res.status(400).json({
-          message:
-            "Name, phone and message are required."
-        });
-      }
+    res.status(201).json({
+      message:
+        "Your inquiry has been received."
+    });
+  } catch (error) {
+    console.error("Inquiry error:", error);
 
-      const result = await query(
-        `
-        INSERT INTO inquiries
-        (
-          name,
-          phone,
-          email,
-          pet,
-          message
-        )
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING *
-        `,
-        [
-          name.trim(),
-          phone.trim(),
-          email?.trim() || null,
-          pet?.trim() || null,
-          message.trim()
-        ]
-      );
+    res.status(500).json({
+      error: "Unable to save your inquiry."
+    });
+  }
+});
 
-      res.status(201).json({
-        message:
-          "Inquiry received successfully.",
-        inquiry:
-          result.rows[0]
-      });
+// --------------------------------------------------
+// Customer order
+// --------------------------------------------------
 
-    } catch (error) {
-      console.error(error);
+app.post("/api/orders", async (req, res) => {
+  try {
+    const name = cleanText(req.body?.name, 100);
+    const phone = cleanText(req.body?.phone, 40);
+    const email = cleanText(req.body?.email, 150);
+    const items = cleanText(req.body?.items, 5000);
+    const address = cleanText(req.body?.address, 1000);
 
-      res.status(500).json({
-        message:
-          "Could not submit inquiry."
+    if (!name || !phone || !items || !address) {
+      return res.status(400).json({
+        error:
+          "Name, phone, items and address are required."
       });
     }
-  }
-);
 
-
-/* =========================================================
-   CUSTOMER ORDER
-   ========================================================= */
-
-app.post(
-  "/api/orders",
-  async (req, res) => {
-    try {
-      const {
+    await query(
+      `
+      INSERT INTO orders (
         name,
         phone,
         email,
         items,
+        address,
+        status
+      )
+      VALUES ($1, $2, $3, $4, $5, 'pending')
+      `,
+      [
+        name,
+        phone,
+        email || null,
+        items,
         address
-      } = req.body;
+      ]
+    );
 
-      if (
-        !name ||
-        !phone ||
-        !items ||
-        !address
-      ) {
-        return res.status(400).json({
-          message:
-            "Name, phone, items and address are required."
-        });
-      }
+    res.status(201).json({
+      message:
+        "Your order has been received."
+    });
+  } catch (error) {
+    console.error("Order error:", error);
 
-      const result = await query(
-        `
-        INSERT INTO orders
-        (
-          name,
-          phone,
-          email,
-          items,
-          address,
-          status
-        )
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING *
-        `,
-        [
-          name.trim(),
-          phone.trim(),
-          email?.trim() || null,
-          items.trim(),
-          address.trim(),
-          "pending"
-        ]
-      );
-
-      res.status(201).json({
-        message:
-          "Order received successfully.",
-        order:
-          result.rows[0]
-      });
-
-    } catch (error) {
-      console.error(error);
-
-      res.status(500).json({
-        message:
-          "Could not submit order."
-      });
-    }
+    res.status(500).json({
+      error: "Unable to save your order."
+    });
   }
-);
+});
 
-
-/* =========================================================
-   OWNER — VIEW INQUIRIES
-   ========================================================= */
+// --------------------------------------------------
+// Owner inquiries
+// --------------------------------------------------
 
 app.get(
   "/api/owner/inquiries",
@@ -872,25 +780,21 @@ app.get(
       );
 
       res.json({
-        inquiries:
-          result.rows
+        inquiries: result.rows
       });
-
     } catch (error) {
-      console.error(error);
+      console.error("Owner inquiries error:", error);
 
       res.status(500).json({
-        message:
-          "Could not load inquiries."
+        error: "Unable to load inquiries."
       });
     }
   }
 );
 
-
-/* =========================================================
-   OWNER — VIEW ORDERS
-   ========================================================= */
+// --------------------------------------------------
+// Owner orders
+// --------------------------------------------------
 
 app.get(
   "/api/owner/orders",
@@ -906,51 +810,57 @@ app.get(
       );
 
       res.json({
-        orders:
-          result.rows
+        orders: result.rows
       });
-
     } catch (error) {
-      console.error(error);
+      console.error("Owner orders error:", error);
 
       res.status(500).json({
-        message:
-          "Could not load orders."
+        error: "Unable to load orders."
       });
     }
   }
 );
 
+// --------------------------------------------------
+// Error handling
+// --------------------------------------------------
 
-/* =========================================================
-   ERROR HANDLER
-   ========================================================= */
+app.use((error, _req, res, _next) => {
+  console.error("Server error:", error);
 
-app.use(
-  (error, _req, res, _next) => {
-    console.error(error);
-
-    if (
-      error instanceof multer.MulterError
-    ) {
+  if (error instanceof multer.MulterError) {
+    if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
-        message:
-          "Image upload failed. Please check the file size and try again."
+        error: "Image must be 5 MB or smaller."
       });
     }
 
-    res.status(500).json({
-      message:
-        error.message ||
-        "An unexpected server error occurred."
+    return res.status(400).json({
+      error: "Image upload failed."
     });
   }
-);
 
+  if (error.message?.includes("Only JPG")) {
+    return res.status(400).json({
+      error: error.message
+    });
+  }
 
-/* =========================================================
-   START SERVER
-   ========================================================= */
+  if (error.message?.includes("Origin not allowed")) {
+    return res.status(403).json({
+      error: "Request origin is not allowed."
+    });
+  }
+
+  res.status(500).json({
+    error: "Something went wrong on the server."
+  });
+});
+
+// --------------------------------------------------
+// Start server
+// --------------------------------------------------
 
 async function startServer() {
   try {
@@ -958,13 +868,12 @@ async function startServer() {
 
     app.listen(PORT, () => {
       console.log(
-        `Pet Store server running on port ${PORT}`
+        `Pet Store backend running on port ${PORT}`
       );
     });
-
   } catch (error) {
     console.error(
-      "Failed to start Pet Store server:",
+      "Unable to start Pet Store backend:",
       error
     );
 
@@ -973,3 +882,5 @@ async function startServer() {
 }
 
 startServer();
+
+export default app;
