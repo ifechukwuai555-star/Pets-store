@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <meta
+    name="description"
+    content="Pet Store - Find loving pets and make your inquiry today."
+  >
+
+  <title>Pet Store | Find Your Perfect Pet</title>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <!-- =====================================================
+       HEADER / NAVIGATION
+       ===================================================== -->
+
+  <header class="site-header">
+    <div class="container header-inner">
+
+      <a href="#home" class="logo">
+        <span class="logo-icon">🐾</span>
+        <span>Pet Store</span>
+      </a>
+
+      <nav class="main-nav" aria-label="Main navigation">
+        <a href="#home">Home</a>
+        <a href="#pets">Pets</a>
+        <a href="#categories">Categories</a>
+        <a href="#about">About</a>
+        <a href="#contact">Contact</a>
+        <a href="#owner">Owner Area</a>
+      </nav>
+
+    </div>
+  </header>
+
+
+  <main>
+
+    <!-- ===================================================
+         HERO
+         =================================================== -->
+
+    <section id="home" class="hero">
+      <div class="container hero-content">
+
+        <div class="hero-text">
+
+          <p class="eyebrow">
+            🐾 Welcome to Pet Store
+          </p>
+
+          <h1>
+            Find a Loving Companion
+            <span>You'll Cherish.</span>
+          </h1>
+
+          <p>
+            Discover wonderful pets and find the right
+            companion for your home. Browse our available
+            pets and send an inquiry today.
+          </p>
+
+          <div class="hero-actions">
+            <a
+              href="#pets"
+              class="btn btn-primary"
+            >
+              View Available Pets
+            </a>
+
+            <a
+              href="#inquiry"
+              class="btn btn-secondary"
+            >
+              Make an Inquiry
+            </a>
+          </div>
+
+        </div>
+
+        <div class="hero-visual" aria-hidden="true">
+          <div class="hero-paw">🐾</div>
+          <div class="hero-animal">🐶</div>
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- ===================================================
+         CATEGORIES
+         =================================================== -->
+
+    <section
+      id="categories"
+      class="section categories-section"
+    >
+
+      <div class="container">
+
+        <div class="section-heading">
+          <p class="eyebrow">Explore</p>
+
+          <h2>Pet Categories</h2>
+
+          <p>
+            Choose a category and discover pets that
+            may be right for you.
+          </p>
+        </div>
+
+
+        <div class="category-grid">
+
+          <button
+            class="category-card"
+            type="button"
+            data-category="dogs"
+          >
+            <span class="category-icon">🐶</span>
+            <strong>Dogs</strong>
+            <span>Friendly companions</span>
+          </button>
+
+
+          <button
+            class="category-card"
+            type="button"
+            data-category="cats"
+          >
+            <span class="category-icon">🐱</span>
+            <strong>Cats</strong>
+            <span>Playful companions</span>
+          </button>
+
+
+          <button
+            class="category-card"
+            type="button"
+            data-category="birds"
+          >
+            <span class="category-icon">🐦</span>
+            <strong>Birds</strong>
+            <span>Beautiful feathered friends</span>
+          </button>
+
+
+          <button
+            class="category-card"
+            type="button"
+            data-category="other"
+          >
+            <span class="category-icon">🐾</span>
+            <strong>Other Pets</strong>
+            <span>Explore more pets</span>
+          </button>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         PETS
+         =================================================== -->
+
+    <section
+      id="pets"
+      class="section pets-section"
+    >
+
+      <div class="container">
+
+        <div class="section-heading">
+          <p class="eyebrow">Our Collection</p>
+
+          <h2>Available Pets</h2>
+
+          <p>
+            Tap a pet to learn more or send an inquiry.
+          </p>
+        </div>
+
+
+        <!-- JavaScript will load database pets here -->
+        <div
+          id="petGrid"
+          class="pet-grid"
+          aria-live="polite"
+        >
+
+          <!-- Sample pet card -->
+          <article
+            class="pet-card"
+            data-category="dogs"
+            data-pet-name="Friendly Dog"
+          >
+
+            <button
+              type="button"
+              class="pet-image-button"
+              data-pet="Friendly Dog"
+              aria-label="Ask about Friendly Dog"
+            >
+              <div class="pet-image-placeholder">
+                🐶
+              </div>
+            </button>
+
+
+            <div class="pet-card-body">
+
+              <span class="pet-category">
+                Dog
+              </span>
+
+              <h3>Friendly Dog</h3>
+
+              <p>
+                A wonderful companion looking for
+                a caring home.
+              </p>
+
+              <div class="pet-price">
+                Contact for price
+              </div>
+
+              <div class="pet-actions">
+
+                <button
+                  type="button"
+                  class="btn btn-primary inquiry-pet-btn"
+                  data-pet="Friendly Dog"
+                >
+                  Inquire
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn-outline like-btn"
+                  data-pet-id=""
+                >
+                  ❤️ <span class="like-count">0</span>
+                </button>
+
+              </div>
+
+            </div>
+
+          </article>
+
+        </div>
+
+
+        <div
+          id="petLoading"
+          class="loading-message"
+          hidden
+        >
+          Loading available pets...
+        </div>
+
+
+        <div
+          id="petEmpty"
+          class="empty-message"
+          hidden
+        >
+          No pets are currently available in this category.
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         PRODUCTS / PET SUPPLIES
+         =================================================== -->
+
+    <section
+      id="products"
+      class="section products-section"
+    >
+
+      <div class="container">
+
+        <div class="section-heading">
+          <p class="eyebrow">Pet Essentials</p>
+
+          <h2>Pet Supplies</h2>
+
+          <p>
+            Get useful supplies for your new companion.
+          </p>
+        </div>
+
+
+        <div class="product-grid">
+
+          <article class="product-card">
+            <div class="product-icon">🦴</div>
+
+            <h3>Pet Treats</h3>
+
+            <p>
+              Treats for rewarding your furry friend.
+            </p>
+
+            <strong>Ask for price</strong>
+
+            <button
+              type="button"
+              class="btn btn-primary add-to-cart"
+              data-product="Pet Treats"
+            >
+              Add to Cart
+            </button>
+          </article>
+
+
+          <article class="product-card">
+            <div class="product-icon">🥣</div>
+
+            <h3>Food Bowl</h3>
+
+            <p>
+              A simple bowl for everyday feeding.
+            </p>
+
+            <strong>Ask for price</strong>
+
+            <button
+              type="button"
+              class="btn btn-primary add-to-cart"
+              data-product="Food Bowl"
+            >
+              Add to Cart
+            </button>
+          </article>
+
+
+          <article class="product-card">
+            <div class="product-icon">🧸</div>
+
+            <h3>Pet Toy</h3>
+
+            <p>
+              Keep your pet active and entertained.
+            </p>
+
+            <strong>Ask for price</strong>
+
+            <button
+              type="button"
+              class="btn btn-primary add-to-cart"
+              data-product="Pet Toy"
+            >
+              Add to Cart
+            </button>
+          </article>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         ORDER
+         =================================================== -->
+
+    <section
+      id="order"
+      class="section order-section"
+    >
+
+      <div class="container narrow-container">
+
+        <div class="section-heading">
+          <p class="eyebrow">Order</p>
+
+          <h2>Place an Order</h2>
+
+          <p>
+            Tell us what you would like to order and
+            we'll contact you.
+          </p>
+        </div>
+
+
+        <form
+          id="orderForm"
+          class="form-card"
+        >
+
+          <div class="form-group">
+            <label for="orderName">
+              Your Name
+            </label>
+
+            <input
+              id="orderName"
+              name="name"
+              type="text"
+              required
+              autocomplete="name"
+              placeholder="Enter your name"
+            >
+          </div>
+
+
+          <div class="form-group">
+            <label for="orderPhone">
+              Phone Number
+            </label>
+
+            <input
+              id="orderPhone"
+              name="phone"
+              type="tel"
+              required
+              autocomplete="tel"
+              placeholder="Enter your phone number"
+            >
+          </div>
+
+
+          <div class="form-group">
+            <label for="orderEmail">
+              Email
+            </label>
+
+            <input
+              id="orderEmail"
+              name="email"
+              type="email"
+              autocomplete="email"
+              placeholder="Enter your email"
+            >
+          </div>
+
+
+          <div class="form-group">
+            <label for="orderItems">
+              What would you like to order?
+            </label>
+
+            <textarea
+              id="orderItems"
+              name="items"
+              rows="4"
+              required
+              placeholder="Tell us what you want to order..."
+            ></textarea>
+          </div>
+
+
+          <div class="form-group">
+            <label for="orderAddress">
+              Delivery / Contact Address
+            </label>
+
+            <textarea
+              id="orderAddress"
+              name="address"
+              rows="3"
+              placeholder="Enter your address if delivery is required"
+            ></textarea>
+          </div>
+
+
+          <button
+            type="submit"
+            class="btn btn-primary btn-full"
+          >
+            Submit Order
+          </button>
+
+          <p
+            id="orderMessage"
+            class="form-message"
+            role="status"
+            aria-live="polite"
+          ></p>
+
+        </form>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         INQUIRY
+         =================================================== -->
+
+    <section
+      id="inquiry"
+      class="section inquiry-section"
+    >
+
+      <div class="container narrow-container">
+
+        <div class="section-heading">
+          <p class="eyebrow">Interested?</p>
+
+          <h2>Make an Inquiry</h2>
+
+          <p>
+            Tell us which pet you're interested in.
+          </p>
+        </div>
+
+
+        <form
+          id="inquiryForm"
+          class="form-card"
+        >
+
+          <div class="form-group">
+            <label for="inquiryName">
+              Your Name
+            </label>
+
+            <input
+              id="inquiryName"
+              name="name"
+              type="text"
+              required
+              autocomplete="name"
+              placeholder="Enter your name"
+            >
+          </div>
+
+
+          <div class="form-group">
+            <label for="inquiryPhone">
+              Phone Number
+            </label>
+
+            <input
+              id="inquiryPhone"
+              name="phone"
+              type="tel"
+              required
+              autocomplete="tel"
+              placeholder="Enter your phone number"
+            >
+          </div>
+
+
+          <div class="form-group">
+            <label for="inquiryEmail">
+              Email
+            </label>
+
+            <input
+              id="inquiryEmail"
+              name="email"
+              type="email"
+              autocomplete="email"
+              placeholder="Enter your email"
+            >
+          </div>
+
+
+          <div class="form-group">
+            <label for="inquiryPet">
+              Pet
+            </label>
+
+            <input
+              id="inquiryPet"
+              name="pet"
+              type="text"
+              required
+              placeholder="Which pet are you interested in?"
+            >
+          </div>
+
+
+          <div class="form-group">
+            <label for="inquiryMessage">
+              Message
+            </label>
+
+            <textarea
+              id="inquiryMessage"
+              name="message"
+              rows="5"
+              placeholder="Tell us what you'd like to know..."
+            ></textarea>
+          </div>
+
+
+          <button
+            type="submit"
+            class="btn btn-primary btn-full"
+          >
+            Send Inquiry
+          </button>
+
+
+          <div
+            id="inquirySuccess"
+            class="success-message"
+            hidden
+            role="status"
+            aria-live="polite"
+          >
+            Your inquiry has been received.
+          </div>
+
+
+          <p
+            id="inquiryMessageStatus"
+            class="form-message"
+            role="status"
+            aria-live="polite"
+          ></p>
+
+        </form>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         ABOUT
+         =================================================== -->
+
+    <section
+      id="about"
+      class="section about-section"
+    >
+
+      <div class="container">
+
+        <div class="section-heading">
+          <p class="eyebrow">Why Pet Store?</p>
+
+          <h2>A Better Way to Find Your Companion</h2>
+
+          <p>
+            We want the process of finding a pet to be
+            simple, clear and enjoyable.
+          </p>
+        </div>
+
+
+        <div class="benefit-grid">
+
+          <article class="benefit-card">
+            <span>❤️</span>
+
+            <h3>Care First</h3>
+
+            <p>
+              We encourage responsible and caring
+              pet ownership.
+            </p>
+          </article>
+
+
+          <article class="benefit-card">
+            <span>🔎</span>
+
+            <h3>Easy Discovery</h3>
+
+            <p>
+              Browse different categories and find
+              pets that interest you.
+            </p>
+          </article>
+
+
+          <article class="benefit-card">
+            <span>💬</span>
+
+            <h3>Easy Inquiries</h3>
+
+            <p>
+              Ask questions before making a decision.
+            </p>
+          </article>
+
+
+          <article class="benefit-card">
+            <span>🐾</span>
+
+            <h3>Happy Companions</h3>
+
+            <p>
+              Every pet deserves a caring and
+              responsible home.
+            </p>
+          </article>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         OWNER AREA
+         =================================================== -->
+
+    <section
+      id="owner"
+      class="section owner-section"
+    >
+
+      <div class="container narrow-container">
+
+        <div class="section-heading">
+          <p class="eyebrow">Private Area</p>
+
+          <h2>Owner Area</h2>
+
+          <p>
+            This area is for the Pet Store owner only.
+          </p>
+        </div>
+
+
+        <!-- OWNER SETUP -->
+
+        <div
+          id="ownerSetup"
+          class="owner-panel"
+          hidden
+        >
+
+          <h3>Create Owner Password</h3>
+
+          <p>
+            Create your own password to protect
+            the private owner dashboard.
+          </p>
+
+          <p class="security-note">
+            Your password is handled by the secure
+            backend and is not stored in this HTML file.
+          </p>
+
+
+          <form id="ownerSetupForm">
+
+            <div class="form-group">
+              <label for="setupPassword">
+                Create Password
+              </label>
+
+              <input
+                id="setupPassword"
+                name="password"
+                type="password"
+                minlength="8"
+                required
+                autocomplete="new-password"
+                placeholder="Create your password"
+              >
+            </div>
+
+
+            <div class="form-group">
+              <label for="setupConfirmPassword">
+                Confirm Password
+              </label>
+
+              <input
+                id="setupConfirmPassword"
+                name="confirmPassword"
+                type="password"
+                minlength="8"
+                required
+                autocomplete="new-password"
+                placeholder="Confirm your password"
+              >
+            </div>
+
+
+            <button
+              type="submit"
+              class="btn btn-primary btn-full"
+            >
+              Create Owner Account
+            </button>
+
+          </form>
+
+        </div>
+
+
+        <!-- OWNER LOGIN -->
+
+        <div
+          id="ownerLogin"
+          class="owner-panel"
+          hidden
+        >
+
+          <h3>Owner Login</h3>
+
+          <p>
+            Enter the password created by the store owner.
+          </p>
+
+
+          <form id="ownerLoginForm">
+
+            <div class="form-group">
+              <label for="ownerPassword">
+                Owner Password
+              </label>
+
+              <input
+                id="ownerPassword"
+                name="password"
+                type="password"
+                required
+                autocomplete="current-password"
+                placeholder="Enter owner password"
+              >
+            </div>
+
+
+            <button
+              type="submit"
+              class="btn btn-primary btn-full"
+            >
+              Login
+            </button>
+
+          </form>
+
+        </div>
+
+
+        <!-- OWNER STATUS -->
+
+        <p
+          id="ownerStatusMessage"
+          class="form-message"
+          role="status"
+          aria-live="polite"
+        ></p>
+
+
+        <!-- OWNER DASHBOARD -->
+
+        <div
+          id="ownerDashboard"
+          class="owner-dashboard"
+          hidden
+        >
+
+          <div class="owner-dashboard-header">
+
+            <div>
+              <p class="eyebrow">Private Dashboard</p>
+
+              <h3>Store Management</h3>
+            </div>
+
+            <button
+              id="ownerLogout"
+              type="button"
+              class="btn btn-outline"
+            >
+              Logout
+            </button>
+
+          </div>
+
+
+          <!-- ADD PET -->
+
+          <div class="owner-panel">
+
+            <h3>Add a Pet</h3>
+
+            <p>
+              Add a new pet to the store.
+            </p>
+
+
+            <form
+              id="addPetForm"
+              enctype="multipart/form-data"
+            >
+
+              <div class="form-group">
+                <label for="petName">
+                  Pet Name
+                </label>
+
+                <input
+                  id="petName"
+                  name="name"
+                  type="text"
+                  required
+                  placeholder="Pet name"
+                >
+              </div>
+
+
+              <div class="form-group">
+                <label for="petCategory">
+                  Category
+                </label>
+
+                <select
+                  id="petCategory"
+                  name="category"
+                  required
+                >
+                  <option value="">
+                    Select category
+                  </option>
+
+                  <option value="dogs">
+                    Dogs
+                  </option>
+
+                  <option value="cats">
+                    Cats
+                  </option>
+
+                  <option value="birds">
+                    Birds
+                  </option>
+
+                  <option value="other">
+                    Other Pets
+                  </option>
+                </select>
+              </div>
+
+
+              <div class="form-group">
+                <label for="petDescription">
+                  Description
+                </label>
+
+                <textarea
+                  id="petDescription"
+                  name="description"
+                  rows="4"
+                  required
+                  placeholder="Describe the pet..."
+                ></textarea>
+              </div>
+
+
+              <div class="form-group">
+                <label for="petPrice">
+                  Price
+                </label>
+
+                <input
+                  id="petPrice"
+                  name="price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                  placeholder="Enter price"
+                >
+              </div>
+
+
+              <div class="form-group">
+
+                <label for="petImage">
+                  Pet Photo
+                </label>
+
+                <input
+                  id="petImage"
+                  name="image"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                >
+
+                <small>
+                  Maximum image size: 5MB.
+                </small>
+
+              </div>
+
+
+              <button
+                type="submit"
+                class="btn btn-primary btn-full"
+              >
+                Add Pet
+              </button>
+
+
+              <p
+                id="addPetMessage"
+                class="form-message"
+                role="status"
+                aria-live="polite"
+              ></p>
+
+            </form>
+
+          </div>
+
+
+          <!-- OWNER PET MANAGEMENT -->
+
+          <div class="owner-panel">
+
+            <h3>Manage Pets</h3>
+
+            <div
+              id="ownerPetGallery"
+              class="owner-pet-gallery"
+            >
+              <p>
+                Your pets will appear here.
+              </p>
+            </div>
+
+          </div>
+
+
+          <!-- INQUIRIES -->
+
+          <div class="owner-panel">
+
+            <h3>Customer Inquiries</h3>
+
+            <div
+              id="ownerInquiries"
+              class="owner-records"
+            >
+              <p>
+                No inquiries loaded.
+              </p>
+            </div>
+
+          </div>
+
+
+          <!-- ORDERS -->
+
+          <div class="owner-panel">
+
+            <h3>Customer Orders</h3>
+
+            <div
+              id="ownerOrders"
+              class="owner-records"
+            >
+              <p>
+                No orders loaded.
+              </p>
+            </div>
+
+          </div>
+
+
+          <!-- CHANGE PASSWORD -->
+
+          <div class="owner-panel">
+
+            <h3>Change Password</h3>
+
+            <form
+              id="changePasswordForm"
+            >
+
+              <div class="form-group">
+                <label for="currentPassword">
+                  Current Password
+                </label>
+
+                <input
+                  id="currentPassword"
+                  name="currentPassword"
+                  type="password"
+                  required
+                  autocomplete="current-password"
+                >
+              </div>
+
+
+              <div class="form-group">
+                <label for="newPassword">
+                  New Password
+                </label>
+
+                <input
+                  id="newPassword"
+                  name="newPassword"
+                  type="password"
+                  minlength="8"
+                  required
+                  autocomplete="new-password"
+                >
+              </div>
+
+
+              <button
+                type="submit"
+                class="btn btn-primary"
+              >
+                Change Password
+              </button>
+
+
+              <p
+                id="changePasswordMessage"
+                class="form-message"
+                role="status"
+                aria-live="polite"
+              ></p>
+
+            </form>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <!-- =====================================================
+       FOOTER
+       ===================================================== -->
+
+  <footer
+    id="contact"
+    class="site-footer"
+  >
+
+    <div class="container footer-grid">
+
+      <div>
+
+        <a
+          href="#home"
+          class="footer-logo"
+        >
+          🐾 Pet Store
+        </a>
+
+        <p>
+          Find your perfect companion and make
+          an informed, responsible choice.
+        </p>
+
+      </div>
+
+
+      <div>
+
+        <h3>Contact</h3>
+
+        <p>
+          📞
+          <a href="tel:09138434907">
+            09138434907
+          </a>
+        </p>
+
+        <p>
+          ✉️
+          <a href="mailto:chisomife01@gmail.com">
+            chisomife01@gmail.com
+          </a>
+        </p>
+
+      </div>
+
+
+      <div>
+
+        <h3>Social</h3>
+
+        <div class="social-links">
+
+          <a
+            href="#"
+            aria-label="WhatsApp"
+            data-social="whatsapp"
+          >
+            WhatsApp
+          </a>
+
+          <a
+            href="#"
+            aria-label="Facebook"
+            data-social="facebook"
+          >
+            Facebook
+          </a>
+
+          <a
+            href="#"
+            aria-label="Twitter"
+            data-social="twitter"
+          >
+            Twitter
+          </a>
+
+          <a
+            href="#"
+            aria-label="TikTok"
+            data-social="tiktok"
+          >
+            TikTok
+          </a>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="footer-bottom">
+
+      <p>
+        © <span id="currentYear"></span>
+        Pet Store. All rights reserved.
+      </p>
+
+    </div>
+
+  </footer>
+
+
+  <!-- =====================================================
+       JAVASCRIPT
+       ===================================================== -->
+
+  <script src="script.js" defer></script>
+
+</body>
+</html>
